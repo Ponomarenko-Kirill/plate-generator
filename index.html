@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Генератор номеров</title>
+<style>
+  html, body { height: 100%; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at top, #1e3a5f, #0a0f1c 70%);
+    font-family: Arial, sans-serif; color: #fff;
+    padding: 20px;
+    /* страница не растягивается */
+    overflow: hidden;
+  }
+  .layout {
+    display: flex; gap: 20px; align-items: flex-start;
+    /* высота ограничена высотой вьюпорта */
+    max-height: calc(100vh - 40px);
+  }
+  .card, .history-card {
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 18px;
+    padding: 28px 34px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  .card { text-align: center; min-width: 460px; }
+  h1 { font-size: 18px; margin: 0 0 18px; opacity: .9; }
+
+  /* Номер */
+  .plate-wrap {
+    display: inline-block;
+    background: #fff; border: 3px solid #111; border-radius: 8px;
+    padding: 8px 0 8px 14px; margin-bottom: 16px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.4);
+  }
+  .plate { display: flex; align-items: stretch; }
+  .plate .main {
+    display: flex; align-items: center;
+    font-family: 'Arial Black', Arial, sans-serif;
+    font-weight: 900; font-size: 52px;
+    letter-spacing: 3px; color: #111; line-height: 1;
+    padding-right: 12px;
+  }
+  .plate .sep { width: 2px; background: #111; margin: 2px 0; }
+  .plate .region-box {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 0 12px;
+  }
+  .plate .region-code { font-size: 30px; font-weight: 900; color: #111; line-height: 1; }
+  .plate .flag-row { display: flex; align-items: center; gap: 3px; margin-top: 4px; }
+  .ru {
+    background: linear-gradient(#fff 33%, #0039a6 33% 66%, #d52b1e 66%);
+    width: 22px; height: 15px; border: 1px solid #999; border-radius: 2px;
+  }
+  .plate .rus-text { font-size: 12px; font-weight: bold; color: #111; letter-spacing: 1px; }
+
+  /* Цена и рейтинг */
+  .price {
+    font-size: 30px; font-weight: 800;
+    background: linear-gradient(135deg, #ffd166, #ff8c42);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    min-height: 36px; line-height: 1.1;
+  }
+  .rating {
+    display: inline-block; margin-top: 6px;
+    padding: 3px 12px; border-radius: 20px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .rating.r1 { background: rgba(255,255,255,.12); color: #cfd8e3; }
+  .rating.r2 { background: rgba(80,200,120,.2); color: #67e39a; }
+  .rating.r3 { background: rgba(120,140,255,.25); color: #aab6ff; }
+  .rating.r4 { background: rgba(255,200,60,.25); color: #ffd166;
+               box-shadow: 0 0 12px rgba(255,200,60,.3); }
+  .reason { margin-top: 8px; font-size: 12px; opacity: .65; min-height: 16px; }
+
+  /* Управление */
+  .controls { display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+  select {
+    padding: 11px 14px; font-size: 14px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.1); color: #fff;
+    cursor: pointer; outline: none; min-width: 220px;
+  }
+  select option { background: #1a2332; color: #fff; }
+  button {
+    background: linear-gradient(135deg, #4f8cff, #6a5cff);
+    border: none; color: #fff;
+    padding: 12px 28px; font-size: 15px;
+    border-radius: 10px; cursor: pointer; font-weight: 600;
+    box-shadow: 0 8px 25px rgba(79,140,255,.5);
+    transition: transform .15s;
+  }
+  button:hover { transform: translateY(-2px); }
+  button:active { transform: translateY(0); }
+
+  /* История */
+  .history-card {
+    width: 320px;
+    /* ФИКСИРОВАННАЯ высота, чтобы история не растягивала страницу */
+    height: 500px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .history-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+  }
+  .history-header h2 { font-size: 15px; margin: 0; opacity: .9; }
+  .clear-btn {
+    background: rgba(255,90,90,.2); color: #ff8080;
+    padding: 6px 12px; font-size: 11px;
+    border-radius: 8px; box-shadow: none;
+  }
+  .clear-btn:hover { background: rgba(255,90,90,.35); transform: none; }
+
+  /* Список истории — скроллится ВНУТРИ карточки, не влияя на layout */
+  .history-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 8px;
+    padding-right: 4px;
+    min-height: 0;   /* ВАЖНО: без этого flex-элемент не даёт скролл */
+  }
+  .history-list::-webkit-scrollbar { width: 6px; }
+  .history-list::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,.15); border-radius: 3px;
+  }
+  .history-empty { opacity: .35; font-size: 13px; text-align: center; padding: 30px 0; }
+
+  .history-item {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px; padding: 9px 12px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    flex-shrink: 0;
+  }
+  .history-item .hn {
+    font-family: 'Arial Black', Arial, sans-serif;
+    font-size: 17px; font-weight: 900; letter-spacing: 1px;
+  }
+  .history-item .hr { font-size: 10px; text-transform: uppercase; opacity: .7; }
+  .history-item .hr.r1 { color: #cfd8e3; }
+  .history-item .hr.r2 { color: #67e39a; }
+  .history-item .hr.r3 { color: #aab6ff; }
+  .history-item .hr.r4 { color: #ffd166; }
+  .history-item .right { font-size: 13px; font-weight: 700; color: #ffd166; white-space: nowrap; }
+
+  /* ---------- Анимации для VIP / Элитных ---------- */
+@keyframes plateFlashGold {
+  0%   { box-shadow: 0 8px 30px rgba(0,0,0,.4), 0 0 0 rgba(255,215,80,0); }
+  50%  { box-shadow: 0 8px 30px rgba(0,0,0,.4), 0 0 60px 12px rgba(255,215,80,.75);
+         transform: scale(1.06); }
+  100% { box-shadow: 0 8px 30px rgba(0,0,0,.4), 0 0 0 rgba(255,215,80,0);
+         transform: scale(1); }
+}
+@keyframes plateFlashVip {
+  0%   { box-shadow: 0 8px 30px rgba(0,0,0,.4), 0 0 0 rgba(120,140,255,0); }
+  50%  { box-shadow: 0 8px 30px rgba(0,0,0,.4), 0 0 50px 10px rgba(120,140,255,.7);
+         transform: scale(1.05); }
+  100% { box-shadow: 0 8px 30px rgba(0,0,0,.4), 0 0 0 rgba(120,140,255,0);
+         transform: scale(1); }
+}
+.plate-wrap.flash-gold { animation: plateFlashGold 1.1s ease-out; }
+.plate-wrap.flash-vip  { animation: plateFlashVip  1.0s ease-out; }
+
+/* Карточка вспыхивает при элитном номере */
+@keyframes cardGlow {
+  0%   { box-shadow: 0 20px 60px rgba(0,0,0,.5), 0 0 0 rgba(255,200,60,0); }
+  40%  { box-shadow: 0 20px 60px rgba(0,0,0,.5), 0 0 80px 20px rgba(255,200,60,.55); }
+  100% { box-shadow: 0 20px 60px rgba(0,0,0,.5), 0 0 0 rgba(255,200,60,0); }
+}
+.card.glow-gold { animation: cardGlow 1.4s ease-out; }
+
+/* Контейнер для конфетти — поверх всего, не мешает кликам */
+#confettiLayer {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 9999;
+}
+.confetti {
+  position: absolute;
+  width: 10px; height: 14px;
+  border-radius: 2px;
+  will-change: transform, opacity;
+}
+
+</style>
+</head>
+<body>
+  <div class="layout">
+    <div class="card">
+      <h1>🎲 Генератор номеров</h1>
+
+      <div class="plate-wrap">
+        <div class="plate">
+          <span class="main" id="main">—</span>
+          <span class="sep"></span>
+          <span class="region-box">
+            <span class="region-code" id="region">00</span>
+            <span class="flag-row">
+              <span class="ru"></span>
+              <span class="rus-text">RUS</span>
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div class="price" id="price">—</div>
+      <div class="rating" id="rating" style="display:none"></div>
+      <div class="reason" id="reason"></div>
+
+      <div class="controls">
+        <select id="regionSelect">
+          <option value="random">🎲 Случайный регион</option>
+          <option value="77">77 — Москва</option>
+          <option value="99">99 — Москва</option>
+          <option value="97">97 — Москва</option>
+          <option value="78">78 — Санкт-Петербург</option>
+          <option value="98">98 — Санкт-Петербург</option>
+          <option value="50">50 — Московская область</option>
+          <option value="90">90 — Московская область</option>
+          <option value="23">23 — Краснодарский край</option>
+          <option value="93">93 — Краснодарский край</option>
+          <option value="66">66 — Свердловская область</option>
+          <option value="96">96 — Свердловская область</option>
+          <option value="16">16 — Татарстан</option>
+          <option value="116">116 — Татарстан</option>
+          <option value="02">02 — Башкортостан</option>
+          <option value="61">61 — Ростовская область</option>
+          <option value="161">161 — Ростовская область</option>
+          <option value="52">52 — Нижегородская область</option>
+          <option value="63">63 — Самарская область</option>
+          <option value="74">74 — Челябинская область</option>
+          <option value="69">69 — Тверская область</option>
+          <option value="47">47 — Ленинградская область</option>
+          <option value="36">36 — Воронежская область</option>
+          <option value="34">34 — Волгоградская область</option>
+          <option value="26">26 — Ставропольский край</option>
+          <option value="24">24 — Красноярский край</option>
+          <option value="54">54 — Новосибирская область</option>
+          <option value="72">72 — Тюменская область</option>
+          <option value="86">86 — Ханты-Мансийский АО</option>
+          <option value="89">89 — Ямало-Ненецкий АО</option>
+          <option value="82">82 — Республика Крым</option>
+          <option value="92">92 — Севастополь</option>
+        </select>
+        <button onclick="spin()">Крутить номер</button>
+      </div>
+    </div>
+
+    <div class="history-card">
+      <div class="history-header">
+        <h2>📜 История</h2>
+        <button class="clear-btn" onclick="clearHistory()">Очистить</button>
+      </div>
+      <div class="history-list" id="historyList"></div>
+    </div>
+  </div>
+
+<script>
+// ============ Данные ============
+const LETTERS = "АВЕКМНОРСТУХ";
+const REGIONS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,21,22,23,24,25,26,27,
+  28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,
+  56,57,58,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,76,77,78,79,80,81,82,83,84,
+  85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,101,102,103,105,113,116,121,122,123,
+  124,125,126,127,128,129,130,134,136,138,142,147,150,152,154,155,156,158,159,161,
+  163,164,166,169,172,173,174,177,178,180,181,182,184,185,186,190,192,193,195,196,
+  197,198,199,250,252,277,299,323,550,702,716,750,754,761,763,774,777,778,790,797,
+  799,977];
+
+const VIP = ["АМР","ЕКХ","АММ","ВОО","СОО","ООО","КОО","МММ","ААА","ВВВ","ЕЕЕ","ККК",
+  "ННН","РРР","ССС","ТТТ","УУУ","ХХХ","АКР","ВОС","СВА","ХЕР","НАХ","ХАМ","ХУЕ"];
+
+const RATING_CLASS = { "Обычный":"r1", "Красивый":"r2", "VIP":"r3", "Элитный":"r4" };
+
+// ============ Генерация ============
+const rnd = n => Math.floor(Math.random() * n);
+const rl  = () => LETTERS[rnd(LETTERS.length)];
+const rd  = () => String(rnd(10));
+
+function generate(regionOpt) {
+  let reg;
+  if (regionOpt === "random") reg = REGIONS[rnd(REGIONS.length)];
+  else reg = parseInt(regionOpt);
+
+  const main = rl() + rd() + rd() + rd() + rl() + rl();
+  const regStr = reg < 10 ? "0" + reg : String(reg);
+  return main + regStr;
+}
+
+// ============ Оценка ============
+function evaluate(num) {
+  const firstLetter = num[0];
+  const digits      = num.slice(1, 4);
+  const twoLetters  = num.slice(4, 6);
+  const region      = num.slice(6);
+  const lll         = firstLetter + twoLetters;
+
+  let price = 5000;
+  let mult  = 1;
+  const reasons = [];
+
+  const d0 = +digits[0], d1 = +digits[1], d2 = +digits[2];
+
+  const allDigitsSame  = (d0 === d1 && d1 === d2);
+  const allLettersSame = (lll[0] === lll[1] && lll[1] === lll[2]);
+  const digitRepeat    = !allDigitsSame && (d0 === d1 || d1 === d2);
+  const letterRepeat   = !allLettersSame && (twoLetters[0] === twoLetters[1]);
+  const mirrorDigits   = (d0 === d2);
+  const mirrorLetters  = (firstLetter === twoLetters[1]);
+
+  const core      = num.slice(0, 6);
+  const mirrorAll = core === core.split('').reverse().join('');
+
+  const isSignDigits    = (digits === "777" || digits === "666" || digits === "999");
+  const isSpecialDigits = (digits === "007" || digits === "001" || digits === "100");
+  const isRoundDigits   = (!isSpecialDigits && d1 === 0 && d2 === 0 && d0 !== 0);
+
+  // ---------- Последовательности ----------
+  if (d1 === d0 + 1 && d2 === d1 + 1) {
+    const bonus = (digits === "123" || digits === "789" || digits === "012") ? 10000 : 7000;
+    price += bonus;
+    reasons.push("возрастающая последовательность");
+  } else if (d1 === d0 - 1 && d2 === d1 - 1) {
+    const bonus = (digits === "987" || digits === "321" || digits === "210") ? 10000 : 7000;
+    price += bonus;
+    reasons.push("убывающая последовательность");
+  } else if (Math.abs(d1 - d0) === 2 && Math.abs(d2 - d1) === 2) {
+    price += 5000;
+    reasons.push("последовательность через одну");
+  }
+
+  // ---------- ЦИФРЫ: одна причина ----------
+  if (isSignDigits) {
+    price += 50000;
+    mult  *= 2;
+    reasons.push("знаковая серия " + digits);
+  } else if (mirrorDigits) {
+    if (allDigitsSame) {
+      price += 50000;
+      reasons.push("все цифры одинаковые");
+    } else {
+      price += 4000;
+      reasons.push("зеркальные цифры");
+    }
+  } else if (allDigitsSame) {
+    price += 50000;
+    reasons.push("все цифры одинаковые");
+  } else if (isSpecialDigits) {
+    // "001", "007", "100" — раньше здесь был "повтор цифр"
+    price += 3000;
+    reasons.push("знаковое число");
+  } else if (isRoundDigits) {
+    price += 5000;
+    reasons.push("круглое число");
+  } else if (digitRepeat) {
+    price += 8000;
+    reasons.push("повтор цифр");
+  }
+
+  // Цифры = регион
+  if (digits === region) {
+    price += 40000; reasons.push("цифры = регион");
+  }
+
+  // ---------- БУКВЫ ----------
+  if (mirrorLetters && !allLettersSame) {
+    price += 4000;
+    reasons.push("зеркальные буквы");
+  } else if (allLettersSame) {
+    price += 30000;
+    reasons.push("все буквы одинаковые");
+  } else if (letterRepeat) {
+    price += 6000;
+    reasons.push("повтор букв");
+  }
+
+  // ---------- Зеркалка всей части номера ----------
+  if (mirrorAll) {
+    removeReasons(reasons, [
+      "знаковая серия 777", "знаковая серия 666", "знаковая серия 999",
+      "все цифры одинаковые", "повтор цифр",
+      "зеркальные цифры", "знаковое число", "круглое число",
+      "все буквы одинаковые", "повтор букв", "зеркальные буквы"
+    ]);
+    price += 15000;
+    reasons.unshift("зеркальные цифры и буквы");
+  } else if (mirrorDigits && mirrorLetters) {
+    removeReasons(reasons, [
+      "все цифры одинаковые", "повтор цифр",
+      "все буквы одинаковые", "повтор букв"
+    ]);
+    price += 8000;
+    removeReasons(reasons, ["зеркальные цифры", "зеркальные буквы"]);
+    reasons.unshift("зеркальные цифры и буквы");
+  }
+
+  // ---------- VIP-серия ----------
+  if (VIP.includes(lll)) {
+    mult *= 3; reasons.push("VIP-серия " + lll);
+  }
+
+  price = Math.round(price * mult / 1000) * 1000;
+
+  let rating;
+  if (price < 15000)       rating = "Обычный";
+  else if (price < 50000)  rating = "Красивый";
+  else if (price < 150000) rating = "VIP";
+  else                     rating = "Элитный";
+
+  return { number: num, price, rating,
+           reason: reasons.length ? reasons.join(", ") : "обычный номер" };
+}
+
+// Утилита: удаляет из массива reasons все строки из списка
+function removeReasons(arr, toRemove) {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (toRemove.includes(arr[i])) arr.splice(i, 1);
+  }
+}
+
+// Утилита: удаляет из массива reasons все строки из списка
+function removeReasons(arr, toRemove) {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (toRemove.includes(arr[i])) arr.splice(i, 1);
+  }
+}
+
+// Утилита: удаляет из массива reasons все строки из списка
+function removeReasons(arr, toRemove) {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (toRemove.includes(arr[i])) arr.splice(i, 1);
+  }
+}
+
+// Утилита: удаляет из массива reasons все строки из списка
+function removeReasons(arr, toRemove) {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (toRemove.includes(arr[i])) arr.splice(i, 1);
+  }
+}
+// ============ UI ============
+const mainEl   = document.getElementById('main');
+const regionEl = document.getElementById('region');
+const priceEl  = document.getElementById('price');
+const ratingEl = document.getElementById('rating');
+const reasonEl = document.getElementById('reason');
+const sel      = document.getElementById('regionSelect');
+
+function splitNumber(num) {
+  const regionLen = num.length > 8 ? 3 : 2;
+  return {
+    main: num.slice(0, num.length - regionLen),
+    region: num.slice(num.length - regionLen)
+  };
+}
+
+// ============ Анимация подсчёта цены ============
+function animatePrice(target, duration = 600) {
+  const el = document.getElementById('price');
+  const start = performance.now();
+  const from = 0;
+
+  function frame(now) {
+    const t = Math.min(1, (now - start) / duration);
+    // ease-out cubic
+    const eased = 1 - Math.pow(1 - t, 3);
+    const val = Math.round((from + (target - from) * eased) / 100) * 100;
+    el.textContent = val.toLocaleString('ru-RU') + ' ₽';
+    if (t < 1) requestAnimationFrame(frame);
+    else el.textContent = target.toLocaleString('ru-RU') + ' ₽';
+  }
+  requestAnimationFrame(frame);
+}
+
+// ============ Конфетти ============
+function shootConfetti(tier) {
+  // tier: "vip" | "gold"
+  const layer = document.getElementById('confettiLayer');
+  const colorsVip  = ['#7d8cff', '#aab6ff', '#4f8cff', '#6a5cff', '#c8d2ff'];
+  const colorsGold = ['#ffd166', '#ff8c42', '#ffe08a', '#ffb347', '#fff1c1'];
+  const colors = tier === 'gold' ? colorsGold : colorsVip;
+  const count  = tier === 'gold' ? 90 : 55;
+
+  const W = window.innerWidth;
+  // Стартуем из центра карточки номера
+  const card = document.querySelector('.card');
+  const rect = card.getBoundingClientRect();
+  const startX = rect.left + rect.width / 2;
+  const startY = rect.top + rect.height / 2;
+
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti';
+    el.style.background = colors[Math.floor(Math.random() * colors.length)];
+
+    // Случайное смещение старта
+    const dx0 = (Math.random() - 0.5) * 40;
+    const dy0 = (Math.random() - 0.5) * 40;
+    el.style.left = (startX + dx0) + 'px';
+    el.style.top  = (startY + dy0) + 'px';
+    el.style.transform = 'translate(-50%, -50%)';
+
+    // Разлёт
+    const angle = Math.random() * Math.PI * 2;
+    const power = 180 + Math.random() * 260;
+    const vx = Math.cos(angle) * power;
+    const vy = Math.sin(angle) * power - 120;  // чуть вверх
+    const rot = (Math.random() - 0.5) * 720;
+
+    layer.appendChild(el);
+
+    const start = performance.now();
+    const dur = 900 + Math.random() * 700;
+    const gravity = 900;
+    const x0 = 0, y0 = 0;
+
+    function frame(now) {
+      const t = (now - start) / 1000;
+      if (t > dur / 1000) {
+        el.remove();
+        return;
+      }
+      const x = vx * t;
+      const y = vy * t + 0.5 * gravity * t * t;
+      const opacity = Math.max(0, 1 - t / (dur / 1000));
+      el.style.transform =
+        `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) rotate(${rot * t}deg)`;
+      el.style.opacity = opacity;
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+}
+
+// ============ Спецэффекты плашки ============
+function flashPlate(tier) {
+  const plate = document.querySelector('.plate-wrap');
+  const card  = document.querySelector('.card');
+  plate.classList.remove('flash-gold', 'flash-vip');
+  card.classList.remove('glow-gold');
+  // рестарт анимации
+  void plate.offsetWidth;
+  void card.offsetWidth;
+
+  if (tier === 'gold') {
+    plate.classList.add('flash-gold');
+    card.classList.add('glow-gold');
+  } else if (tier === 'vip') {
+    plate.classList.add('flash-vip');
+  }
+}
+
+// ============ Главное действие ============
+async function spin() {
+  const mainEl   = document.getElementById('main');
+  const regionEl = document.getElementById('region');
+  const priceEl  = document.getElementById('price');
+  const ratingEl = document.getElementById('rating');
+  const reasonEl = document.getElementById('reason');
+  const selected = document.getElementById('regionSelect').value;
+
+  priceEl.textContent = '…';
+  ratingEl.style.display = 'none';
+  reasonEl.textContent = '';
+
+  // быстрая прокрутка
+  for (let i = 0; i < 6; i++) {
+    const t = splitNumber(generate(sel.value));
+    mainEl.textContent = t.main;
+    regionEl.textContent = t.region;
+    await new Promise(r => setTimeout(r, 30));
+  }
+
+  const num   = generate(sel.value);
+  const info  = evaluate(num);
+  const parts = splitNumber(num);
+
+  mainEl.textContent   = parts.main;
+  regionEl.textContent = parts.region;
+  ratingEl.textContent = info.rating;
+  ratingEl.className   = 'rating ' + (RATING_CLASS[info.rating] || 'r1');
+  ratingEl.style.display = 'inline-block';
+  reasonEl.textContent = info.reason;
+
+  // Плавный подсчёт цены от 0
+  animatePrice(info.price, info.price > 100000 ? 900 : 600);
+
+  // Спецэффекты
+  if (info.rating === 'VIP') {
+    flashPlate('vip');
+    shootConfetti('vip');
+  } else if (info.rating === 'Элитный') {
+    flashPlate('gold');
+    shootConfetti('gold');
+  }
+
+  addToHistory(info);
+}
+
+// ============ История ============
+const KEY = 'plate_history_simple_v2';
+let history = [];
+
+function loadHistory() {
+  try { history = JSON.parse(localStorage.getItem(KEY) || '[]'); }
+  catch (e) { history = []; }
+  if (!Array.isArray(history)) history = [];
+  renderHistory();
+}
+
+function saveHistory() {
+  try { localStorage.setItem(KEY, JSON.stringify(history.slice(0, 50))); }
+  catch (e) {}
+}
+
+function clearHistory() {
+  if (!confirm('Очистить всю историю?')) return;
+  history = [];
+  saveHistory();
+  renderHistory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  list.innerHTML = '';
+
+  if (history.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'history-empty';
+    empty.innerHTML = 'Пока пусто.<br>Крути номер!';
+    list.appendChild(empty);
+    return;
+  }
+
+  for (const item of history) {
+    const p = splitNumber(item.number);
+    const cls = RATING_CLASS[item.rating] || 'r1';
+
+    const el = document.createElement('div');
+    el.className = 'history-item';
+
+    const left = document.createElement('div');
+    const hn = document.createElement('div');
+    hn.className = 'hn';
+    hn.textContent = p.main + ' | ' + p.region;
+
+    const hr = document.createElement('div');
+    hr.className = 'hr ' + cls;
+    hr.textContent = item.rating;
+
+    left.appendChild(hn);
+    left.appendChild(hr);
+
+    const right = document.createElement('div');
+    right.className = 'right';
+    right.textContent = item.price.toLocaleString('ru-RU') + ' ₽';
+
+    el.appendChild(left);
+    el.appendChild(right);
+    list.appendChild(el);
+  }
+}
+
+function addToHistory(info) {
+  if (history[0] && history[0].number === info.number) return;
+  history.unshift({
+    number: info.number,
+    price: info.price,
+    rating: info.rating,
+    reason: info.reason
+  });
+  if (history.length > 50) history.length = 50;
+  saveHistory();
+  renderHistory();
+}
+
+loadHistory();
+</script>
+<div id="confettiLayer"></div>
+</body>
+</html>
